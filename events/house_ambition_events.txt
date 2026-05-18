@@ -1,0 +1,182 @@
+﻿namespace = house_ambition
+
+# ==============================================================================
+# 0001: STRATEGIC MARRIAGE
+# Finds a balance-safe partner from a ruler's child/sibling inside the
+# anchor realm or a directly bordering realm. Falls back to a generated
+# spouse of the same faith/culture if nobody suitable exists.
+# ==============================================================================
+house_ambition.0001 = {
+	hidden = yes
+
+	trigger = {
+		any_in_global_list = {
+			variable = ham_active_list
+			this = root.house
+		}
+		NOT = {
+			any_in_global_list = {
+				variable = ham_exempt_list
+				this = root
+			}
+		}
+		is_alive = yes
+		is_adult = yes
+		is_visibly_fertile = yes
+		is_married = no
+		is_betrothed = no
+		is_imprisoned = no
+	}
+
+	immediate = {
+		save_scope_as = hsm
+
+		# --- Who decides this character's "home base"? ---
+		if = {
+			limit = { is_landed = yes }
+			save_scope_as = marriage_decider
+		}
+		else_if = {
+			limit = { exists = employer }
+			employer = { save_scope_as = marriage_decider }
+		}
+		else_if = {
+			limit = { exists = liege }
+			liege = { save_scope_as = marriage_decider }
+		}
+		else = {
+			save_scope_as = marriage_decider
+		}
+
+		# --- The realm anchor: top liege of the decider ---
+		scope:marriage_decider = {
+			if = {
+				limit = { exists = top_liege }
+				top_liege = { save_scope_as = realm_anchor }
+			}
+			else = {
+				save_scope_as = realm_anchor
+			}
+		}
+
+		clear_list = ham_rulers
+		clear_list = ham_spouses
+
+		# --- Anchor realm: the top liege and everyone under it ---
+		scope:realm_anchor = {
+			add_to_temporary_list = ham_rulers
+			every_vassal_or_below = {
+				add_to_temporary_list = ham_rulers
+			}
+
+			# --- Bordering realms: holders of neighbouring counties,
+			#     plus their top liege and that realm's vassals ---
+			if = {
+				limit = { exists = capital_county }
+				capital_county = {
+					every_neighboring_county = {
+						limit = { exists = holder }
+						holder = {
+							if = {
+								limit = { exists = top_liege }
+								top_liege = {
+									add_to_temporary_list = ham_rulers
+									every_vassal_or_below = {
+										add_to_temporary_list = ham_rulers
+									}
+								}
+								else = {
+									add_to_temporary_list = ham_rulers
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		# --- Collect children & siblings of qualifying rulers ---
+		every_in_list = {
+			list = ham_rulers
+			limit = { ham_rank_ok_trigger = yes }
+
+			every_child = {
+				save_scope_as = cand
+				limit = { ham_valid_spouse_trigger = yes }
+				add_to_temporary_list = ham_spouses
+			}
+			every_sibling = {
+				save_scope_as = cand
+				limit = { ham_valid_spouse_trigger = yes }
+				add_to_temporary_list = ham_spouses
+			}
+		}
+
+		# --- Pick the best available match (prefer closer ties) ---
+		random_in_list = {
+			list = ham_spouses
+			weight = {
+				base = 10
+				modifier = {
+					add = 300
+					exists = liege
+					liege = scope:realm_anchor
+				}
+				modifier = {
+					add = 150
+					exists = top_liege
+					top_liege = scope:realm_anchor
+				}
+				modifier = {
+					add = 50
+					highest_held_title_tier >= tier_kingdom
+				}
+			}
+			save_scope_as = best_candidate
+		}
+
+		# --- Marry, keeping future children in scope:hsm's house ---
+		if = {
+			limit = { exists = scope:best_candidate }
+			scope:hsm = {
+				if = {
+					limit = { is_male = yes }
+					marry = scope:best_candidate
+				}
+				else = {
+					marry_matrilineal = scope:best_candidate
+				}
+			}
+		}
+		else = {
+			# --- Failsafe: generate a same-faith/culture spouse ---
+			if = {
+				limit = { scope:hsm = { is_male = yes } }
+				create_character = {
+					random_traits = yes
+					gender = female
+					age = 16
+					dynasty = none
+					faith = scope:hsm.faith
+					culture = scope:hsm.culture
+					employer = scope:marriage_decider
+					save_scope_as = generated_spouse
+				}
+				scope:hsm = { marry = scope:generated_spouse }
+			}
+			else = {
+				create_character = {
+					random_traits = yes
+					gender = male
+					age = 16
+					dynasty = none
+					faith = scope:hsm.faith
+					culture = scope:hsm.culture
+					employer = scope:marriage_decider
+					save_scope_as = generated_spouse
+				}
+				scope:hsm = { marry_matrilineal = scope:generated_spouse }
+			}
+		}
+	}
+}

@@ -1,0 +1,152 @@
+﻿# ==============================================================================
+# HOUSE AMBITION: MARRIAGE - CONTROL PANEL
+# Usable by the player on themselves. Toggles strategic marriage for the
+# whole HOUSE and sets the minimum rank of partner families to target.
+# ==============================================================================
+
+house_ambition_marriage = {
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	is_shown = {
+		scope:actor = { is_ai = no }
+		scope:actor = { this = scope:recipient }
+	}
+
+	is_valid_showing_failures_only = {
+		scope:recipient = { is_landed = yes }
+	}
+
+	on_accept = {
+		scope:recipient = {
+			# --- MASTER TOGGLE (per house) ---
+			if = {
+				limit = { scope:ham_toggle = yes }
+				if = {
+					limit = {
+						NOT = {
+							any_in_global_list = {
+								variable = ham_active_list
+								this = scope:recipient.house
+							}
+						}
+					}
+					add_to_global_variable_list = {
+						name = ham_active_list
+						target = scope:recipient.house
+					}
+					scope:recipient.house = {
+						add_house_modifier = ham_active_modifier
+						if = {
+							limit = { NOT = { has_variable = ham_min_tier } }
+							set_variable = { name = ham_min_tier value = 3 }
+						}
+					}
+				}
+				else = {
+					remove_list_global_variable = {
+						name = ham_active_list
+						target = scope:recipient.house
+					}
+					scope:recipient.house = {
+						remove_house_modifier = ham_active_modifier
+					}
+				}
+			}
+
+			# --- MINIMUM RANK SELECTION (highest checked box wins) ---
+			scope:recipient.house = {
+				if = {
+					limit = { scope:ham_rank_hegemon = yes }
+					set_variable = { name = ham_min_tier value = 6 }
+				}
+				else_if = {
+					limit = { scope:ham_rank_empire = yes }
+					set_variable = { name = ham_min_tier value = 5 }
+				}
+				else_if = {
+					limit = { scope:ham_rank_kingdom = yes }
+					set_variable = { name = ham_min_tier value = 4 }
+				}
+				else_if = {
+					limit = { scope:ham_rank_duchy = yes }
+					set_variable = { name = ham_min_tier value = 3 }
+				}
+				else_if = {
+					limit = { scope:ham_rank_county = yes }
+					set_variable = { name = ham_min_tier value = 2 }
+				}
+			}
+		}
+	}
+
+	send_option = {
+		flag = ham_toggle
+		localization = ham_toggle
+	}
+	send_option = {
+		flag = ham_rank_county
+		localization = ham_rank_county
+	}
+	send_option = {
+		flag = ham_rank_duchy
+		localization = ham_rank_duchy
+	}
+	send_option = {
+		flag = ham_rank_kingdom
+		localization = ham_rank_kingdom
+	}
+	send_option = {
+		flag = ham_rank_empire
+		localization = ham_rank_empire
+	}
+	send_option = {
+		flag = ham_rank_hegemon
+		localization = ham_rank_hegemon
+	}
+	send_options_exclusive = no
+
+	auto_accept = { always = yes }
+
+	ai_will_do = { always = no }
+}
+
+# Exempt a single character from the automated marriage.
+house_ambition_exempt = {
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	is_shown = {
+		scope:actor = { is_ai = no }
+	}
+
+	on_accept = {
+		scope:recipient = {
+			if = {
+				limit = {
+					NOT = {
+						any_in_global_list = {
+							variable = ham_exempt_list
+							this = scope:recipient
+						}
+					}
+				}
+				add_to_global_variable_list = {
+					name = ham_exempt_list
+					target = scope:recipient
+				}
+				add_character_modifier = ham_exempt_modifier
+			}
+			else = {
+				remove_list_global_variable = {
+					name = ham_exempt_list
+					target = scope:recipient
+				}
+				remove_character_modifier = ham_exempt_modifier
+			}
+		}
+	}
+
+	auto_accept = { always = yes }
+	ai_will_do = { always = no }
+}

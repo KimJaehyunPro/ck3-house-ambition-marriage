@@ -1,0 +1,17 @@
+﻿l_english:
+ house_ambition_marriage:0 "House Ambition: Strategic Marriage"
+ house_ambition_marriage_desc:0 "Manage automated strategic marriages for your entire house."
+ house_ambition_exempt:0 "House Ambition: Exempt Character"
+ house_ambition_exempt_desc:0 "Exclude or re-include this character from automated marriage."
+
+ ham_toggle:0 "Enable Strategic Marriage (toggle)"
+ ham_rank_county:0 "Minimum rank: Count"
+ ham_rank_duchy:0 "Minimum rank: Duke"
+ ham_rank_kingdom:0 "Minimum rank: King"
+ ham_rank_empire:0 "Minimum rank: Emperor"
+ ham_rank_hegemon:0 "Minimum rank: Hegemon (independent Emperor)"
+
+ ham_active_modifier:0 "Strategic Marriage Active"
+ ham_active_modifier_desc:0 "Unmarried adult members of this house automatically seek a beneficial spouse."
+ ham_exempt_modifier:0 "Exempt from Strategic Marriage"
+ ham_exempt_modifier_desc:0 "This character is excluded from House Ambition automated marriage."

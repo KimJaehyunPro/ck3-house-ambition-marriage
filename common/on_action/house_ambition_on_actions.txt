@@ -1,0 +1,17 @@
+﻿# ==============================================================================
+# HOUSE AMBITION: MARRIAGE - ON ACTIONS
+# ==============================================================================
+
+# Proven reliable sweep (same hook the working AutoMarriage mod uses).
+random_yearly_everyone_pulse = {
+	events = {
+		house_ambition.0001
+	}
+}
+
+# Extra responsiveness: also try right after a character ages up.
+on_birthday = {
+	events = {
+		house_ambition.0001
+	}
+}
