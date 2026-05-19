@@ -1,7 +1,7 @@
-﻿ham_active_modifier = {
+﻿ha_expansionist_modifier = {
 	icon = fertility_positive
 }
 
-ham_exempt_modifier = {
+ha_exempt_modifier = {
 	icon = fertility_negative
 }

@@ -1,39 +1,32 @@
 ﻿namespace = house_ambition
 
-# ==============================================================================
-# 0001: STRATEGIC MARRIAGE
-# Finds a balance-safe partner from a ruler's child/sibling inside the
-# anchor realm or a directly bordering realm. Falls back to a generated
-# spouse of the same faith/culture if nobody suitable exists.
-# ==============================================================================
-house_ambition.0001 = {
+# Mirrors the proven-working backup (house_ambition.1001). Only changes:
+#  - every_neighboring_ruler (does not exist) replaced with a real
+#    capital_county -> every_neighboring_county -> holder -> top_liege search
+#  - minimum rank filter driven by the house variable ha_min_tier
+#  - ruler-self candidate dropped (we only want children / siblings)
+#  - ha_force flag lets the debug interaction run it on demand
+house_ambition.1001 = {
 	hidden = yes
-
 	trigger = {
-		any_in_global_list = {
-			variable = ham_active_list
-			this = root.house
+		OR = {
+			any_in_global_list = { variable = ha_expansionist_list this = root.house }
+			has_character_flag = ha_force
 		}
-		NOT = {
-			any_in_global_list = {
-				variable = ham_exempt_list
-				this = root
-			}
-		}
+		NOT = { any_in_global_list = { variable = ha_exempt_list this = root } }
 		is_alive = yes
 		is_adult = yes
 		is_visibly_fertile = yes
 		is_married = no
 		is_betrothed = no
-		is_imprisoned = no
 	}
-
 	immediate = {
-		save_scope_as = hsm
+		remove_character_flag = ha_force
+		save_scope_as = person_to_marry
+		debug_log = "AMBITION: --- START MATCHMAKING ---"
 
-		# --- Who decides this character's "home base"? ---
 		if = {
-			limit = { is_landed = yes }
+			limit = { is_ruler = yes }
 			save_scope_as = marriage_decider
 		}
 		else_if = {
@@ -44,138 +37,179 @@ house_ambition.0001 = {
 			limit = { exists = liege }
 			liege = { save_scope_as = marriage_decider }
 		}
-		else = {
-			save_scope_as = marriage_decider
-		}
 
-		# --- The realm anchor: top liege of the decider ---
-		scope:marriage_decider = {
-			if = {
-				limit = { exists = top_liege }
-				top_liege = { save_scope_as = realm_anchor }
-			}
-			else = {
-				save_scope_as = realm_anchor
-			}
-		}
+		if = {
+			limit = { exists = scope:marriage_decider }
 
-		clear_list = ham_rulers
-		clear_list = ham_spouses
-
-		# --- Anchor realm: the top liege and everyone under it ---
-		scope:realm_anchor = {
-			add_to_temporary_list = ham_rulers
-			every_vassal_or_below = {
-				add_to_temporary_list = ham_rulers
+			scope:marriage_decider = {
+				if = {
+					limit = { exists = top_liege }
+					top_liege = { save_scope_as = realm_anchor }
+				}
+				else = { save_scope_as = realm_anchor }
 			}
 
-			# --- Bordering realms: holders of neighbouring counties,
-			#     plus their top liege and that realm's vassals ---
-			if = {
-				limit = { exists = capital_county }
-				capital_county = {
-					every_neighboring_county = {
-						limit = { exists = holder }
-						holder = {
-							if = {
-								limit = { exists = top_liege }
-								top_liege = {
-									add_to_temporary_list = ham_rulers
-									every_vassal_or_below = {
-										add_to_temporary_list = ham_rulers
+			scope:realm_anchor = {
+				add_to_temporary_list = local_rulers
+				every_vassal_or_below = {
+					limit = { highest_held_title_tier >= tier_county }
+					add_to_temporary_list = local_rulers
+				}
+
+				# Bordering realms: holders of neighbouring counties + their realm
+				if = {
+					limit = { exists = capital_county }
+					capital_county = {
+						every_neighboring_county = {
+							limit = { exists = holder }
+							holder = {
+								if = {
+									limit = { exists = top_liege }
+									top_liege = {
+										add_to_temporary_list = local_rulers
+										every_vassal_or_below = {
+											limit = { highest_held_title_tier >= tier_county }
+											add_to_temporary_list = local_rulers
+										}
 									}
 								}
 								else = {
-									add_to_temporary_list = ham_rulers
+									add_to_temporary_list = local_rulers
 								}
 							}
 						}
 					}
 				}
 			}
+
+			every_in_list = {
+				list = local_rulers
+
+				limit = {
+					trigger_if = {
+						limit = { scope:person_to_marry.house = { var:ha_min_tier >= 6 } }
+						is_independent_ruler = yes
+						highest_held_title_tier >= tier_empire
+					}
+					trigger_else = {
+						highest_held_title_tier >= scope:person_to_marry.house.var:ha_min_tier
+					}
+				}
+
+				every_child = {
+					save_scope_as = current_candidate
+					limit = {
+						NOT = { this = scope:person_to_marry }
+						NOT = { highest_held_title_tier = tier_barony }
+						is_adult = yes is_married = no is_betrothed = no is_imprisoned = no is_visibly_fertile = yes
+						is_capable_adult = yes
+						NOT = { has_trait = eunuch }
+						NOT = { has_trait = devoted }
+						NOT = { is_close_family_of = scope:person_to_marry }
+						faith = { faith_hostility_level = { target = scope:person_to_marry.faith value < 2 } }
+						OR = {
+							AND = { scope:person_to_marry = { is_male = yes } is_female = yes }
+							AND = { scope:person_to_marry = { is_female = yes } is_male = yes }
+						}
+						NOT = { dynasty = scope:person_to_marry.dynasty }
+						NOT = { any_child = { always = yes } }
+						NOT = {
+							any_parent = {
+								any_held_title = {
+									exists = primary_heir
+									primary_heir = scope:current_candidate
+								}
+							}
+						}
+					}
+					add_to_temporary_list = valid_spouses
+				}
+
+				every_sibling = {
+					save_scope_as = current_candidate
+					limit = {
+						NOT = { this = scope:person_to_marry }
+						NOT = { highest_held_title_tier = tier_barony }
+						is_adult = yes is_married = no is_betrothed = no is_imprisoned = no is_visibly_fertile = yes
+						is_capable_adult = yes
+						NOT = { has_trait = eunuch }
+						NOT = { has_trait = devoted }
+						NOT = { is_close_family_of = scope:person_to_marry }
+						faith = { faith_hostility_level = { target = scope:person_to_marry.faith value < 2 } }
+						OR = {
+							AND = { scope:person_to_marry = { is_male = yes } is_female = yes }
+							AND = { scope:person_to_marry = { is_female = yes } is_male = yes }
+						}
+						NOT = { dynasty = scope:person_to_marry.dynasty }
+						NOT = { any_child = { always = yes } }
+						NOT = {
+							any_parent = {
+								any_held_title = {
+									exists = primary_heir
+									primary_heir = scope:current_candidate
+								}
+							}
+						}
+					}
+					add_to_temporary_list = valid_spouses
+				}
+			}
+
+			random_in_list = {
+				list = valid_spouses
+				weight = {
+					base = 10
+					modifier = {
+						add = 400
+						exists = employer
+						employer = {
+							OR = {
+								this = scope:marriage_decider.liege
+								AND = { exists = liege liege = scope:marriage_decider.liege }
+							}
+						}
+					}
+					modifier = {
+						add = 200
+						exists = employer
+						employer = {
+							exists = top_liege
+							top_liege = scope:realm_anchor
+						}
+					}
+				}
+				save_scope_as = best_candidate
+			}
 		}
 
-		# --- Collect children & siblings of qualifying rulers ---
-		every_in_list = {
-			list = ham_rulers
-			limit = { ham_rank_ok_trigger = yes }
-
-			every_child = {
-				save_scope_as = cand
-				limit = { ham_valid_spouse_trigger = yes }
-				add_to_temporary_list = ham_spouses
-			}
-			every_sibling = {
-				save_scope_as = cand
-				limit = { ham_valid_spouse_trigger = yes }
-				add_to_temporary_list = ham_spouses
-			}
-		}
-
-		# --- Pick the best available match (prefer closer ties) ---
-		random_in_list = {
-			list = ham_spouses
-			weight = {
-				base = 10
-				modifier = {
-					add = 300
-					exists = liege
-					liege = scope:realm_anchor
-				}
-				modifier = {
-					add = 150
-					exists = top_liege
-					top_liege = scope:realm_anchor
-				}
-				modifier = {
-					add = 50
-					highest_held_title_tier >= tier_kingdom
-				}
-			}
-			save_scope_as = best_candidate
-		}
-
-		# --- Marry, keeping future children in scope:hsm's house ---
 		if = {
 			limit = { exists = scope:best_candidate }
-			scope:hsm = {
-				if = {
-					limit = { is_male = yes }
-					marry = scope:best_candidate
-				}
-				else = {
-					marry_matrilineal = scope:best_candidate
-				}
+			debug_log = "AMBITION: SUCCESS - real match secured."
+			scope:person_to_marry = {
+				if = { limit = { is_female = yes } marry_matrilineal = scope:best_candidate }
+				else = { marry = scope:best_candidate }
 			}
 		}
 		else = {
-			# --- Failsafe: generate a same-faith/culture spouse ---
+			debug_log = "AMBITION: FAILSAFE - generating spouse."
+			if = { limit = { NOT = { exists = scope:marriage_decider } } save_scope_as = marriage_decider }
+
 			if = {
-				limit = { scope:hsm = { is_male = yes } }
+				limit = { scope:person_to_marry = { is_female = yes } }
 				create_character = {
-					random_traits = yes
-					gender = female
-					age = 16
-					dynasty = none
-					faith = scope:hsm.faith
-					culture = scope:hsm.culture
-					employer = scope:marriage_decider
+					random_traits = yes gender = male age = 16 employer = scope:marriage_decider
+					dynasty = none faith = scope:person_to_marry.faith culture = scope:person_to_marry.culture
 					save_scope_as = generated_spouse
 				}
-				scope:hsm = { marry = scope:generated_spouse }
+				scope:person_to_marry = { marry_matrilineal = scope:generated_spouse }
 			}
 			else = {
 				create_character = {
-					random_traits = yes
-					gender = male
-					age = 16
-					dynasty = none
-					faith = scope:hsm.faith
-					culture = scope:hsm.culture
-					employer = scope:marriage_decider
+					random_traits = yes gender = female age = 16 employer = scope:marriage_decider
+					dynasty = none faith = scope:person_to_marry.faith culture = scope:person_to_marry.culture
 					save_scope_as = generated_spouse
 				}
-				scope:hsm = { marry_matrilineal = scope:generated_spouse }
+				scope:person_to_marry = { marry = scope:generated_spouse }
 			}
 		}
 	}
