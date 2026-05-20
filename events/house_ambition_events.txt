@@ -1,11 +1,8 @@
 ﻿namespace = house_ambition
 
-# Mirrors the proven-working backup (house_ambition.1001). Only changes:
-#  - every_neighboring_ruler (does not exist) replaced with a real
-#    capital_county -> every_neighboring_county -> holder -> top_liege search
-#  - minimum rank filter driven by the house variable ha_min_tier
-#  - ruler-self candidate dropped (we only want children / siblings)
-#  - ha_force flag lets the debug interaction run it on demand
+# Mirrors the proven-working backup architecture (single event, on_birthday).
+# Heir filter uses direct relation checks (not a temp list inside a nested
+# limit, which is unreliable in CK3).
 house_ambition.1001 = {
 	hidden = yes
 	trigger = {
@@ -24,6 +21,14 @@ house_ambition.1001 = {
 		remove_character_flag = ha_force
 		save_scope_as = person_to_marry
 		debug_log = "AMBITION: --- START MATCHMAKING ---"
+
+		if = {
+			limit = { house ?= { has_variable = ha_min_tier } }
+			house = { save_scope_value_as = { name = ha_min value = var:ha_min_tier } }
+		}
+		else = {
+			save_scope_value_as = { name = ha_min value = 2 }
+		}
 
 		if = {
 			limit = { is_ruler = yes }
@@ -56,7 +61,6 @@ house_ambition.1001 = {
 					add_to_temporary_list = local_rulers
 				}
 
-				# Bordering realms: holders of neighbouring counties + their realm
 				if = {
 					limit = { exists = capital_county }
 					capital_county = {
@@ -87,14 +91,19 @@ house_ambition.1001 = {
 
 				limit = {
 					trigger_if = {
-						limit = { scope:person_to_marry.house = { var:ha_min_tier >= 6 } }
+						limit = { scope:ha_min >= 6 }
 						is_independent_ruler = yes
 						highest_held_title_tier >= tier_empire
 					}
 					trigger_else = {
-						highest_held_title_tier >= scope:person_to_marry.house.var:ha_min_tier
+						highest_held_title_tier >= scope:ha_min
 					}
 				}
+
+				# CRITICAL: save the ruler we're harvesting from so the heir
+				# filter can reach it via a concrete scope (temp list access
+				# inside nested limits is unreliable in CK3).
+				save_scope_as = source_ruler
 
 				every_child = {
 					save_scope_as = current_candidate
@@ -113,14 +122,49 @@ house_ambition.1001 = {
 						}
 						NOT = { dynasty = scope:person_to_marry.dynasty }
 						NOT = { any_child = { always = yes } }
-						NOT = {
-							any_parent = {
-								any_held_title = {
-									exists = primary_heir
-									primary_heir = scope:current_candidate
-								}
+
+						could_marry_character_trigger = { CHARACTER = scope:person_to_marry }
+
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							is_house_head = no
+						}
+
+						trigger_if = {
+							limit = { exists = liege }
+							liege = { opinion = { target = scope:person_to_marry value >= -20 } }
+						}
+
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							any_parent = { any_child = { count >= 2 is_male = yes } }
+						}
+
+						# HARD HEURISTIC: matrilineal candidate must NOT be the
+						# eldest living son. Under feudal succession the eldest
+						# son IS the primary heir and no AI lets you take their
+						# primary heir your way. This catches the heir even if
+						# the primary_heir character-link check below missed.
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							any_sibling = {
+								is_male = yes
+								is_alive = yes
+								age > prev.age
 							}
 						}
+
+						# === HEIR FILTER (direct relation checks) ===
+						# 1. The ruler we found this candidate through.
+						NOT = { scope:source_ruler = { exists = primary_heir primary_heir = scope:current_candidate } }
+						# 2. Any of the candidate's parents.
+						NOT = { any_parent = { exists = primary_heir primary_heir = scope:current_candidate } }
+						# 3. Candidate's liege.
+						trigger_if = { limit = { exists = liege } NOT = { liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						# 4. Candidate's top liege.
+						trigger_if = { limit = { exists = top_liege } NOT = { top_liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						# 5. Candidate's employer (for courtiers).
+						trigger_if = { limit = { exists = employer } NOT = { employer = { exists = primary_heir primary_heir = scope:current_candidate } } }
 					}
 					add_to_temporary_list = valid_spouses
 				}
@@ -142,14 +186,50 @@ house_ambition.1001 = {
 						}
 						NOT = { dynasty = scope:person_to_marry.dynasty }
 						NOT = { any_child = { always = yes } }
-						NOT = {
-							any_parent = {
-								any_held_title = {
-									exists = primary_heir
-									primary_heir = scope:current_candidate
-								}
+
+						could_marry_character_trigger = { CHARACTER = scope:person_to_marry }
+
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							is_house_head = no
+						}
+
+						trigger_if = {
+							limit = { exists = liege }
+							liege = { opinion = { target = scope:person_to_marry value >= -20 } }
+						}
+
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							any_parent = { any_child = { count >= 2 is_male = yes } }
+						}
+
+						# HARD HEURISTIC: matrilineal candidate must NOT be the
+						# eldest living son. Under feudal succession the eldest
+						# son IS the primary heir and no AI lets you take their
+						# primary heir your way. This catches the heir even if
+						# the primary_heir character-link check below missed.
+						trigger_if = {
+							limit = { scope:person_to_marry = { is_female = yes } }
+							any_sibling = {
+								is_male = yes
+								is_alive = yes
+								age > prev.age
 							}
 						}
+
+						# === HEIR FILTER (direct relation checks) ===
+						# 1. The ruler we found this candidate through
+						#    (their sibling who IS a ruler).
+						NOT = { scope:source_ruler = { exists = primary_heir primary_heir = scope:current_candidate } }
+						# 2. Any of the candidate's parents.
+						NOT = { any_parent = { exists = primary_heir primary_heir = scope:current_candidate } }
+						# 3. Candidate's liege.
+						trigger_if = { limit = { exists = liege } NOT = { liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						# 4. Candidate's top liege.
+						trigger_if = { limit = { exists = top_liege } NOT = { top_liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						# 5. Candidate's employer (for courtiers).
+						trigger_if = { limit = { exists = employer } NOT = { employer = { exists = primary_heir primary_heir = scope:current_candidate } } }
 					}
 					add_to_temporary_list = valid_spouses
 				}
@@ -183,7 +263,12 @@ house_ambition.1001 = {
 		}
 
 		if = {
-			limit = { exists = scope:best_candidate }
+			limit = {
+				exists = scope:best_candidate
+				scope:best_candidate = {
+					could_marry_character_trigger = { CHARACTER = scope:person_to_marry }
+				}
+			}
 			debug_log = "AMBITION: SUCCESS - real match secured."
 			scope:person_to_marry = {
 				if = { limit = { is_female = yes } marry_matrilineal = scope:best_candidate }
