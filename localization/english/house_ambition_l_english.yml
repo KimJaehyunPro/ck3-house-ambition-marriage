@@ -1,16 +1,24 @@
 ﻿l_english:
+
+ #############################################################################
+ # House Ambition: Marriage - English localisation
+ #############################################################################
+
+ # --- Character interactions --------------------------------------------------
  house_ambition_options:0 "House Ambition: Strategic Marriage"
- house_ambition_exempt:0 "House Ambition: Exempt Character"
- ha_test_marry:0 "House Ambition: TEST Marriage Now"
+ house_ambition_exempt:0  "House Ambition: Exempt Character"
+ ha_test_marry:0          "House Ambition: TEST Marriage Now"
 
+ # --- Control-panel checkbox labels -------------------------------------------
  expansionist_marry:0 "Enable Strategic Marriage (toggle)"
- rank_county:0 "Minimum rank: Count"
- rank_duchy:0 "Minimum rank: Duke"
- rank_kingdom:0 "Minimum rank: King"
- rank_empire:0 "Minimum rank: Emperor"
- rank_hegemon:0 "Minimum rank: Hegemon (independent Emperor)"
+ rank_county:0        "Minimum rank: Count"
+ rank_duchy:0         "Minimum rank: Duke"
+ rank_kingdom:0       "Minimum rank: King"
+ rank_empire:0        "Minimum rank: Emperor"
+ rank_hegemon:0       "Minimum rank: Hegemon (independent Emperor)"
 
- ha_expansionist_modifier:0 "Strategic Marriage Active"
+ # --- Modifiers ---------------------------------------------------------------
+ ha_expansionist_modifier:0      "Strategic Marriage Active"
  ha_expansionist_modifier_desc:0 "Unmarried adult members of this house automatically seek a beneficial spouse."
- ha_exempt_modifier:0 "Exempt from Strategic Marriage"
- ha_exempt_modifier_desc:0 "This character is excluded from House Ambition automated marriage."
+ ha_exempt_modifier:0            "Exempt from Strategic Marriage"
+ ha_exempt_modifier_desc:0       "This character is excluded from House Ambition automated marriage."

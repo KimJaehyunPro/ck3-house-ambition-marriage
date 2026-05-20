@@ -1,4 +1,13 @@
-﻿# Same hook the working backup uses.
+﻿###############################################################################
+# House Ambition: Marriage
+#
+# common/on_action/house_ambition_on_actions.txt
+#
+# The matchmaker is driven by on_birthday so it is evaluated for every
+# character once per year on a stable, vanilla-supported hook. The event's
+# own trigger gates execution to opted-in houses and eligible members.
+###############################################################################
+
 on_birthday = {
 	events = {
 		house_ambition.1001

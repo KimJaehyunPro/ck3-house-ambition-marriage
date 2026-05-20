@@ -1,4 +1,18 @@
-﻿ha_expansionist_modifier = {
+﻿###############################################################################
+# House Ambition: Marriage
+#
+# common/modifiers/house_ambition_modifiers.txt
+#
+# Cosmetic / informational modifiers used to indicate state:
+#
+#   ha_expansionist_modifier - applied to a house while strategic marriage is
+#                              enabled for that house.
+#
+#   ha_exempt_modifier       - applied to a character while they are exempt
+#                              from the automated matchmaker.
+###############################################################################
+
+ha_expansionist_modifier = {
 	icon = fertility_positive
 }
 

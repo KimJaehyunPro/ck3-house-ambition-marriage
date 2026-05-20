@@ -1,27 +1,68 @@
-﻿namespace = house_ambition
+﻿###############################################################################
+# House Ambition: Marriage
+#
+# events/house_ambition_events.txt
+#
+# Strategic auto-marriage matchmaker. When the feature is enabled on a house,
+# every eligible adult house member is matched with a partner from a relative
+# of a ruler inside the house member's realm or a directly bordering realm.
+#
+# Marriage direction (so future children stay in the house member's house):
+#   - Male member       -> patrilineal `marry`
+#   - Female member     -> matrilineal `marry_matrilineal`
+#
+# Candidate pool:
+#   - Anchor realm  = top liege of the house member's marriage decider
+#   - Pool          = anchor realm + every realm directly bordering it
+#                     (via county neighbors of the anchor's capital)
+#   - Source rulers = rulers in the pool of at least the minimum rank
+#   - Candidates    = unmarried, fertile, non-heir children and siblings of
+#                     each source ruler
+#
+# Failsafe:
+#   If no suitable real candidate exists (or the chosen one is not legally
+#   marriageable to the house member), a same-faith / same-culture spouse is
+#   generated at age 16 and married instead.
+###############################################################################
 
-# Mirrors the proven-working backup architecture (single event, on_birthday).
-# Heir filter uses direct relation checks (not a temp list inside a nested
-# limit, which is unreliable in CK3).
+namespace = house_ambition
+
+# -----------------------------------------------------------------------------
+# house_ambition.1001
+#
+# Hidden matchmaker event. Fired by on_birthday for every character, and also
+# fired directly by the debug interaction (which sets `ha_force` to bypass the
+# house-toggle gate so the player can test instantly).
+# -----------------------------------------------------------------------------
 house_ambition.1001 = {
 	hidden = yes
+
 	trigger = {
+		# Either the house is opted in, or this is a manual debug invocation.
 		OR = {
 			any_in_global_list = { variable = ha_expansionist_list this = root.house }
 			has_character_flag = ha_force
 		}
+		# Per-character opt-out.
 		NOT = { any_in_global_list = { variable = ha_exempt_list this = root } }
+
+		# Only marry eligible adults.
 		is_alive = yes
 		is_adult = yes
 		is_visibly_fertile = yes
 		is_married = no
 		is_betrothed = no
 	}
+
 	immediate = {
 		remove_character_flag = ha_force
 		save_scope_as = person_to_marry
 		debug_log = "AMBITION: --- START MATCHMAKING ---"
 
+		# ---------------------------------------------------------------------
+		# Resolve the house's minimum-rank setting with a safe default.
+		# `ha_min_tier` is stored on the house variable. Default is 2 (Count).
+		# ---------------------------------------------------------------------
 		if = {
 			limit = { house ?= { has_variable = ha_min_tier } }
 			house = { save_scope_value_as = { name = ha_min value = var:ha_min_tier } }
@@ -30,6 +71,11 @@ house_ambition.1001 = {
 			save_scope_value_as = { name = ha_min value = 2 }
 		}
 
+		# ---------------------------------------------------------------------
+		# Identify the "marriage decider" - the character whose realm decides
+		# the geographic pool. For a ruler it is themselves; for a courtier it
+		# is their employer; for any other vassal it is their direct liege.
+		# ---------------------------------------------------------------------
 		if = {
 			limit = { is_ruler = yes }
 			save_scope_as = marriage_decider
@@ -46,6 +92,10 @@ house_ambition.1001 = {
 		if = {
 			limit = { exists = scope:marriage_decider }
 
+			# -----------------------------------------------------------------
+			# Anchor = the marriage decider's top liege (or themselves if
+			# they are already independent).
+			# -----------------------------------------------------------------
 			scope:marriage_decider = {
 				if = {
 					limit = { exists = top_liege }
@@ -54,6 +104,11 @@ house_ambition.1001 = {
 				else = { save_scope_as = realm_anchor }
 			}
 
+			# -----------------------------------------------------------------
+			# Build the ruler pool: the anchor realm plus every realm directly
+			# bordering it (found by walking neighbouring counties of the
+			# anchor's capital and harvesting their holders' top lieges).
+			# -----------------------------------------------------------------
 			scope:realm_anchor = {
 				add_to_temporary_list = local_rulers
 				every_vassal_or_below = {
@@ -86,10 +141,15 @@ house_ambition.1001 = {
 				}
 			}
 
+			# -----------------------------------------------------------------
+			# Walk each ruler in the pool whose rank meets the minimum, then
+			# harvest valid children and siblings into `valid_spouses`.
+			# -----------------------------------------------------------------
 			every_in_list = {
 				list = local_rulers
 
 				limit = {
+					# Hegemon (tier 6) means independent emperor.
 					trigger_if = {
 						limit = { scope:ha_min >= 6 }
 						is_independent_ruler = yes
@@ -100,51 +160,75 @@ house_ambition.1001 = {
 					}
 				}
 
-				# CRITICAL: save the ruler we're harvesting from so the heir
-				# filter can reach it via a concrete scope (temp list access
-				# inside nested limits is unreliable in CK3).
+				# Save the source ruler so the heir filter has a concrete
+				# scope (temporary-list access from a nested limit is
+				# unreliable in CK3).
 				save_scope_as = source_ruler
 
+				# -------------------------------------------------------------
+				# Children of the source ruler.
+				# -------------------------------------------------------------
 				every_child = {
 					save_scope_as = current_candidate
 					limit = {
+						# --- Basic eligibility -------------------------------
 						NOT = { this = scope:person_to_marry }
 						NOT = { highest_held_title_tier = tier_barony }
-						is_adult = yes is_married = no is_betrothed = no is_imprisoned = no is_visibly_fertile = yes
+						is_adult = yes
+						is_married = no
+						is_betrothed = no
+						is_imprisoned = no
+						is_visibly_fertile = yes
 						is_capable_adult = yes
 						NOT = { has_trait = eunuch }
 						NOT = { has_trait = devoted }
 						NOT = { is_close_family_of = scope:person_to_marry }
 						faith = { faith_hostility_level = { target = scope:person_to_marry.faith value < 2 } }
+
+						# --- Opposite sex (required to produce children) -----
 						OR = {
 							AND = { scope:person_to_marry = { is_male = yes } is_female = yes }
 							AND = { scope:person_to_marry = { is_female = yes } is_male = yes }
 						}
+
+						# --- Don't draw from our own bloodline ---------------
 						NOT = { dynasty = scope:person_to_marry.dynasty }
+
+						# --- Only invest in someone with no children yet -----
 						NOT = { any_child = { always = yes } }
 
+						# --- Vanilla legality (faith, age, betrothal, etc.) --
 						could_marry_character_trigger = { CHARACTER = scope:person_to_marry }
 
+						# --- Acceptance approximations -----------------------
+						# The true vanilla acceptance value is not readable
+						# from script. These are the best practical proxies.
+
+						# A man who is the head of his house cannot legally be
+						# taken matrilineally.
 						trigger_if = {
 							limit = { scope:person_to_marry = { is_female = yes } }
 							is_house_head = no
 						}
 
+						# Their liege - the de-facto decision maker - must not
+						# strongly dislike us.
 						trigger_if = {
 							limit = { exists = liege }
 							liege = { opinion = { target = scope:person_to_marry value >= -20 } }
 						}
 
+						# Matrilineal: families only give up a spare son, never
+						# an only son.
 						trigger_if = {
 							limit = { scope:person_to_marry = { is_female = yes } }
 							any_parent = { any_child = { count >= 2 is_male = yes } }
 						}
 
-						# HARD HEURISTIC: matrilineal candidate must NOT be the
-						# eldest living son. Under feudal succession the eldest
-						# son IS the primary heir and no AI lets you take their
-						# primary heir your way. This catches the heir even if
-						# the primary_heir character-link check below missed.
+						# Matrilineal: candidate must not be the eldest living
+						# son. Under feudal succession the eldest is the
+						# primary heir and no AI lets you take their primary
+						# heir your way.
 						trigger_if = {
 							limit = { scope:person_to_marry = { is_female = yes } }
 							any_sibling = {
@@ -154,36 +238,43 @@ house_ambition.1001 = {
 							}
 						}
 
-						# === HEIR FILTER (direct relation checks) ===
-						# 1. The ruler we found this candidate through.
+						# --- Heir-status filter ------------------------------
+						# Exclude the candidate if they are the primary heir
+						# of a relevant ruler (source ruler, parents, liege,
+						# top liege, or employer).
 						NOT = { scope:source_ruler = { exists = primary_heir primary_heir = scope:current_candidate } }
-						# 2. Any of the candidate's parents.
 						NOT = { any_parent = { exists = primary_heir primary_heir = scope:current_candidate } }
-						# 3. Candidate's liege.
-						trigger_if = { limit = { exists = liege } NOT = { liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
-						# 4. Candidate's top liege.
+						trigger_if = { limit = { exists = liege }     NOT = { liege     = { exists = primary_heir primary_heir = scope:current_candidate } } }
 						trigger_if = { limit = { exists = top_liege } NOT = { top_liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
-						# 5. Candidate's employer (for courtiers).
-						trigger_if = { limit = { exists = employer } NOT = { employer = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						trigger_if = { limit = { exists = employer }  NOT = { employer  = { exists = primary_heir primary_heir = scope:current_candidate } } }
 					}
 					add_to_temporary_list = valid_spouses
 				}
 
+				# -------------------------------------------------------------
+				# Siblings of the source ruler (same filters as children).
+				# -------------------------------------------------------------
 				every_sibling = {
 					save_scope_as = current_candidate
 					limit = {
 						NOT = { this = scope:person_to_marry }
 						NOT = { highest_held_title_tier = tier_barony }
-						is_adult = yes is_married = no is_betrothed = no is_imprisoned = no is_visibly_fertile = yes
+						is_adult = yes
+						is_married = no
+						is_betrothed = no
+						is_imprisoned = no
+						is_visibly_fertile = yes
 						is_capable_adult = yes
 						NOT = { has_trait = eunuch }
 						NOT = { has_trait = devoted }
 						NOT = { is_close_family_of = scope:person_to_marry }
 						faith = { faith_hostility_level = { target = scope:person_to_marry.faith value < 2 } }
+
 						OR = {
 							AND = { scope:person_to_marry = { is_male = yes } is_female = yes }
 							AND = { scope:person_to_marry = { is_female = yes } is_male = yes }
 						}
+
 						NOT = { dynasty = scope:person_to_marry.dynasty }
 						NOT = { any_child = { always = yes } }
 
@@ -204,11 +295,6 @@ house_ambition.1001 = {
 							any_parent = { any_child = { count >= 2 is_male = yes } }
 						}
 
-						# HARD HEURISTIC: matrilineal candidate must NOT be the
-						# eldest living son. Under feudal succession the eldest
-						# son IS the primary heir and no AI lets you take their
-						# primary heir your way. This catches the heir even if
-						# the primary_heir character-link check below missed.
 						trigger_if = {
 							limit = { scope:person_to_marry = { is_female = yes } }
 							any_sibling = {
@@ -218,23 +304,20 @@ house_ambition.1001 = {
 							}
 						}
 
-						# === HEIR FILTER (direct relation checks) ===
-						# 1. The ruler we found this candidate through
-						#    (their sibling who IS a ruler).
 						NOT = { scope:source_ruler = { exists = primary_heir primary_heir = scope:current_candidate } }
-						# 2. Any of the candidate's parents.
 						NOT = { any_parent = { exists = primary_heir primary_heir = scope:current_candidate } }
-						# 3. Candidate's liege.
-						trigger_if = { limit = { exists = liege } NOT = { liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
-						# 4. Candidate's top liege.
+						trigger_if = { limit = { exists = liege }     NOT = { liege     = { exists = primary_heir primary_heir = scope:current_candidate } } }
 						trigger_if = { limit = { exists = top_liege } NOT = { top_liege = { exists = primary_heir primary_heir = scope:current_candidate } } }
-						# 5. Candidate's employer (for courtiers).
-						trigger_if = { limit = { exists = employer } NOT = { employer = { exists = primary_heir primary_heir = scope:current_candidate } } }
+						trigger_if = { limit = { exists = employer }  NOT = { employer  = { exists = primary_heir primary_heir = scope:current_candidate } } }
 					}
 					add_to_temporary_list = valid_spouses
 				}
 			}
 
+			# -----------------------------------------------------------------
+			# Pick the best available match. Weighting prefers candidates from
+			# the marriage decider's own court and from the anchor realm.
+			# -----------------------------------------------------------------
 			random_in_list = {
 				list = valid_spouses
 				weight = {
@@ -262,6 +345,11 @@ house_ambition.1001 = {
 			}
 		}
 
+		# ---------------------------------------------------------------------
+		# Marry the best candidate, re-validating legality at the moment of
+		# the marriage. If the pair is no longer legally marriageable, fall
+		# through to the generated-spouse failsafe.
+		# ---------------------------------------------------------------------
 		if = {
 			limit = {
 				exists = scope:best_candidate
@@ -277,22 +365,39 @@ house_ambition.1001 = {
 		}
 		else = {
 			debug_log = "AMBITION: FAILSAFE - generating spouse."
-			if = { limit = { NOT = { exists = scope:marriage_decider } } save_scope_as = marriage_decider }
+
+			# `marriage_decider` may be unset for fully unlanded characters with
+			# no employer/liege; fall back to the person themselves so the
+			# generated spouse has an `employer` value.
+			if = {
+				limit = { NOT = { exists = scope:marriage_decider } }
+				save_scope_as = marriage_decider
+			}
 
 			if = {
 				limit = { scope:person_to_marry = { is_female = yes } }
 				create_character = {
-					random_traits = yes gender = male age = 16 employer = scope:marriage_decider
-					dynasty = none faith = scope:person_to_marry.faith culture = scope:person_to_marry.culture
-					save_scope_as = generated_spouse
+					random_traits = yes
+					gender         = male
+					age            = 16
+					employer       = scope:marriage_decider
+					dynasty        = none
+					faith          = scope:person_to_marry.faith
+					culture        = scope:person_to_marry.culture
+					save_scope_as  = generated_spouse
 				}
 				scope:person_to_marry = { marry_matrilineal = scope:generated_spouse }
 			}
 			else = {
 				create_character = {
-					random_traits = yes gender = female age = 16 employer = scope:marriage_decider
-					dynasty = none faith = scope:person_to_marry.faith culture = scope:person_to_marry.culture
-					save_scope_as = generated_spouse
+					random_traits = yes
+					gender         = female
+					age            = 16
+					employer       = scope:marriage_decider
+					dynasty        = none
+					faith          = scope:person_to_marry.faith
+					culture        = scope:person_to_marry.culture
+					save_scope_as  = generated_spouse
 				}
 				scope:person_to_marry = { marry = scope:generated_spouse }
 			}

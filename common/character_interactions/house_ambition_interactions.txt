@@ -1,20 +1,56 @@
-﻿# Mirrors the proven-working backup interaction structure exactly
-# (no category, no common_interaction, no localization on send_option).
+﻿###############################################################################
+# House Ambition: Marriage
+#
+# common/character_interactions/house_ambition_interactions.txt
+#
+# Three character interactions:
+#
+#   house_ambition_options - The control panel. Toggles strategic marriage on
+#                            or off for the recipient's house, and sets the
+#                            minimum partner-family rank.
+#
+#   house_ambition_exempt  - Per-character opt-out. Excludes the recipient
+#                            from the automated matchmaker.
+#
+#   ha_test_marry          - Debug / utility. Runs the matchmaker on the
+#                            recipient immediately, bypassing both the house
+#                            toggle and the on_birthday gate.
+###############################################################################
 
+# -----------------------------------------------------------------------------
+# House control panel.
+#
+# Send-options (checkboxes) are evaluated on accept:
+#   expansionist_marry - flips the active state for the recipient's house
+#   rank_county..rank_hegemon - sets the minimum partner-family rank
+#       (highest checked box wins; the chosen tier is persisted on the house
+#        in the `ha_min_tier` variable: 2 = Count ... 6 = Hegemon)
+# -----------------------------------------------------------------------------
 house_ambition_options = {
-	is_shown = { scope:actor = { is_ai = no } }
+	is_shown    = { scope:actor = { is_ai = no } }
 	auto_accept = { always = yes }
 
 	on_accept = {
 		scope:recipient = {
-			# TOGGLE: check the box to flip the active state for the whole house.
+			# --- Master toggle: add to or remove from the active list. -------
 			if = {
 				limit = { scope:expansionist_marry = yes }
 				if = {
-					limit = { NOT = { any_in_global_list = { variable = ha_expansionist_list this = scope:recipient.house } } }
-					add_to_global_variable_list = { name = ha_expansionist_list target = scope:recipient.house }
+					limit = {
+						NOT = {
+							any_in_global_list = {
+								variable = ha_expansionist_list
+								this = scope:recipient.house
+							}
+						}
+					}
+					add_to_global_variable_list = {
+						name   = ha_expansionist_list
+						target = scope:recipient.house
+					}
 					scope:recipient.house = {
 						add_house_modifier = ha_expansionist_modifier
+						# Initialise the rank to Count on first activation.
 						if = {
 							limit = { NOT = { has_variable = ha_min_tier } }
 							set_variable = { name = ha_min_tier value = 2 }
@@ -22,12 +58,15 @@ house_ambition_options = {
 					}
 				}
 				else = {
-					remove_list_global_variable = { name = ha_expansionist_list target = scope:recipient.house }
+					remove_list_global_variable = {
+						name   = ha_expansionist_list
+						target = scope:recipient.house
+					}
 					scope:recipient.house = { remove_house_modifier = ha_expansionist_modifier }
 				}
 			}
 
-			# MINIMUM RANK: highest checked box wins.
+			# --- Minimum-rank selection: highest checked box wins. -----------
 			scope:recipient.house = {
 				if = {
 					limit = { scope:rank_hegemon = yes }
@@ -59,16 +98,29 @@ house_ambition_options = {
 	send_option = { flag = rank_kingdom }
 	send_option = { flag = rank_empire }
 	send_option = { flag = rank_hegemon }
+
 	send_options_exclusive = no
 }
 
+# -----------------------------------------------------------------------------
+# Per-character opt-out. Toggling adds or removes the recipient from the
+# global exempt list and applies the corresponding character modifier.
+# -----------------------------------------------------------------------------
 house_ambition_exempt = {
-	is_shown = { scope:actor = { is_ai = no } }
+	is_shown    = { scope:actor = { is_ai = no } }
 	auto_accept = { always = yes }
+
 	on_accept = {
 		scope:recipient = {
 			if = {
-				limit = { NOT = { any_in_global_list = { variable = ha_exempt_list this = scope:recipient } } }
+				limit = {
+					NOT = {
+						any_in_global_list = {
+							variable = ha_exempt_list
+							this = scope:recipient
+						}
+					}
+				}
 				add_to_global_variable_list = { name = ha_exempt_list target = scope:recipient }
 				add_character_modifier = ha_exempt_modifier
 			}
@@ -80,10 +132,15 @@ house_ambition_exempt = {
 	}
 }
 
-# DEBUG: instantly run the matchmaker on the target, ignoring the toggle.
+# -----------------------------------------------------------------------------
+# Debug / utility: run the matchmaker on the recipient immediately. Sets the
+# `ha_force` flag so house_ambition.1001 fires regardless of the house toggle.
+# The flag is cleared inside the event itself.
+# -----------------------------------------------------------------------------
 ha_test_marry = {
-	is_shown = { scope:actor = { is_ai = no } }
+	is_shown    = { scope:actor = { is_ai = no } }
 	auto_accept = { always = yes }
+
 	on_accept = {
 		scope:recipient = {
 			add_character_flag = ha_force
